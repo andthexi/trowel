@@ -103,7 +103,7 @@ The auto-iterating agent flow run by `trowel change work <id>` or **Project work
 _Avoid_: Sandcastle, agent runner.
 
 **Agent harness**:
-The CLI binary that runs an agent role inside a **Turn**. One of `claude`, `codex`, `pi`. Harness is selected via `config.agent.harness` and surfaced by `trowel doctor`.
+The CLI binary that runs an agent role inside a **Turn**. One of `claude`, `codex`, `pi`, `hermes`. Harness is selected via `config.agent.harness` and surfaced by `trowel doctor`. `agent.model` is an optional override; `null` lets the selected harness use its own configured model.
 _Avoid_: Agent, driver, adapter, backend.
 
 **Auditing**:

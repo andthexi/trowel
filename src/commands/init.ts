@@ -113,10 +113,9 @@ function currentChangesDir(existing: PartialConfig | null): string {
 
 async function addAgentConfig(opts: RunInitOptions, existing: PartialConfig | null, merged: Record<string, unknown>): Promise<void> {
 	const harnessAnswer = await opts.prompts.agentHarness(currentHarness(existing))
-	const harness = harnessFactories[harnessAnswer as keyof typeof harnessFactories]
-	if (!harness) throw new Error(`unknown harness '${harnessAnswer}'`)
-	const modelAnswer = await opts.prompts.agentModel(modelDefaultForHarness(existing, harnessAnswer, harness.defaultModel))
-	merged.agent = { ...agentConfig(existing), harness: harnessAnswer, model: modelAnswer }
+	if (!harnessFactories[harnessAnswer as keyof typeof harnessFactories]) throw new Error(`unknown harness '${harnessAnswer}'`)
+	const modelAnswer = await opts.prompts.agentModel(modelDefaultForHarness(existing, harnessAnswer))
+	merged.agent = { ...agentConfig(existing), harness: harnessAnswer, model: modelAnswer.trim() || null }
 }
 
 function agentConfig(existing: PartialConfig | null): Partial<NonNullable<PartialConfig['agent']>> {
@@ -127,9 +126,9 @@ function currentHarness(existing: PartialConfig | null): string {
 	return valueOrDefault(agentConfig(existing).harness, defaultConfig.agent.harness)
 }
 
-function modelDefaultForHarness(existing: PartialConfig | null, harnessAnswer: string, defaultModel: string): string {
-	if (currentHarness(existing) !== harnessAnswer) return defaultModel
-	return valueOrDefault(agentConfig(existing).model, defaultModel)
+function modelDefaultForHarness(existing: PartialConfig | null, harnessAnswer: string): string {
+	if (currentHarness(existing) !== harnessAnswer) return ''
+	return agentConfig(existing).model ?? ''
 }
 
 async function addShipConfig(opts: RunInitOptions, existing: PartialConfig | null, merged: Record<string, unknown>): Promise<void> {
@@ -205,7 +204,7 @@ export async function init(layerArg: string): Promise<void> {
 			}),
 		agentModel: (current) =>
 			input({
-				message: 'Agent model',
+				message: 'Agent model override (leave blank to use the harness-configured model)',
 				default: current,
 			}),
 		shipPr: (current) =>
@@ -341,7 +340,7 @@ if (import.meta.vitest) {
 				$schema: './schema.json',
 				storage: 'file',
 				docs: { changesDir: 'docs/changes' },
-				agent: { harness: 'claude', model: 'claude-opus-4-6' },
+				agent: { harness: 'claude', model: null },
 				ship: { pr: true },
 				work: { audit: false },
 			})
@@ -488,9 +487,15 @@ if (import.meta.vitest) {
 					},
 				}),
 			)
-			expect(modelDefault).toBe('claude-opus-4-6')
+			expect(modelDefault).toBe('')
 			const written = JSON.parse(await read(path.join(f.project, '.trowel', 'config.json'), 'utf8'))
 			expect(written).toMatchObject({ agent: { model: 'claude-sonnet-4-6' } })
+		})
+
+		test('writes a blank agent.model answer as null', async () => {
+			await runProjectInit(f, promptsForFile({ agentModel: async () => '' }))
+			const written = JSON.parse(await read(path.join(f.project, '.trowel', 'config.json'), 'utf8'))
+			expect(written.agent.model).toBeNull()
 		})
 	})
 
@@ -519,7 +524,7 @@ if (import.meta.vitest) {
 			expect(written.agent.harness).toBe('claude')
 		})
 
-		test("switching harness resets the model default to the new harness's defaultModel", async () => {
+		test('switching harness resets the model override to blank', async () => {
 			const configPath = path.join(f.project, '.trowel', 'config.json')
 			await mk(path.dirname(configPath), { recursive: true })
 			await write(configPath, JSON.stringify({ agent: { harness: 'claude', model: 'claude-opus-4-6' } }), 'utf8')
@@ -535,9 +540,7 @@ if (import.meta.vitest) {
 					},
 				}),
 			)
-			// pi's defaultModel is 'anthropic/claude-sonnet-4-5'; the old 'claude-opus-4-6' must not be reused.
-			expect(seenModelDefault).not.toBe('claude-opus-4-6')
-			expect(seenModelDefault?.startsWith('anthropic/')).toBe(true)
+			expect(seenModelDefault).toBe('')
 		})
 
 		test('keeping the same harness preserves the existing model as the prompt default', async () => {

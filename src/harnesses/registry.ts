@@ -1,5 +1,6 @@
 import { claudeHarness } from './claude.ts'
 import { codexHarness } from './codex.ts'
+import { hermesHarness } from './hermes.ts'
 import { piHarness } from './pi.ts'
 import type { HarnessAdapter } from './types.ts'
 
@@ -7,6 +8,7 @@ export const harnessFactories = {
 	claude: claudeHarness,
 	codex: codexHarness,
 	pi: piHarness,
+	hermes: hermesHarness,
 } satisfies Record<string, HarnessAdapter>
 
 export type HarnessKind = keyof typeof harnessFactories
@@ -25,6 +27,7 @@ if (import.meta.vitest) {
 			expect(getHarness('claude').name).toBe('claude')
 			expect(getHarness('codex').name).toBe('codex')
 			expect(getHarness('pi').name).toBe('pi')
+			expect(getHarness('hermes').name).toBe('hermes')
 		})
 
 		test('throws when no harness is registered for the kind', () => {

@@ -5,9 +5,13 @@ import { detectCliVersion, spawnHarness, spawnPrintCommand } from './process.ts'
 import type { HarnessAdapter, HarnessSpawnHandle, HarnessSpawnInteractiveArgs, HarnessSpawnPrintArgs, HarnessVersionInfo } from './types.ts'
 
 function codexInteractiveArgs(args: HarnessSpawnInteractiveArgs): string[] {
-	const out = ['--model', args.model, '--cd', args.cwd]
+	const out = [...modelArgs(args.model), '--cd', args.cwd]
 	if (args.initialPrompt) out.push(args.initialPrompt)
 	return out
+}
+
+function modelArgs(model: string | null): string[] {
+	return model ? ['--model', model] : []
 }
 
 export const codexHarness: HarnessAdapter = {
@@ -21,7 +25,7 @@ export const codexHarness: HarnessAdapter = {
 		// against `codex exec --help` if upgrading.
 		return spawnPrintCommand(
 			'codex',
-			['exec', '--json', '--model', args.model, '--dangerously-bypass-approvals-and-sandbox', '--cd', args.cwd, '-'],
+			['exec', '--json', ...modelArgs(args.model), '--dangerously-bypass-approvals-and-sandbox', '--cd', args.cwd, '-'],
 			{
 				cwd: args.cwd,
 				prompt: args.prompt,
@@ -72,6 +76,12 @@ if (import.meta.vitest) {
 				'--cd',
 				'/tmp/x',
 				'do thing',
+			])
+		})
+		test('interactive args omit the model flag when model is null', () => {
+			expect(codexInteractiveArgs({ model: null, systemPrompt: 's', cwd: '/tmp/x' })).toEqual([
+				'--cd',
+				'/tmp/x',
 			])
 		})
 	})

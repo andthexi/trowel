@@ -11,8 +11,8 @@ export function waitForChildExit(child: ChildProcess): Promise<number> {
 	})
 }
 
-export function spawnHarness(command: string, args: string[], opts: { cwd: string; stdio: 'inherit' | ['pipe', 'pipe', 'pipe'] }): ChildProcess {
-	return spawn(command, args, { cwd: opts.cwd, env: process.env, stdio: opts.stdio })
+export function spawnHarness(command: string, args: string[], opts: { cwd: string; stdio: 'inherit' | ['pipe', 'pipe', 'pipe']; env?: Record<string, string | undefined> }): ChildProcess {
+	return spawn(command, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: opts.stdio })
 }
 
 function pipeHarnessOutput(child: ChildProcess, logStream: Writable): void {

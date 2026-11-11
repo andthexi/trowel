@@ -2,14 +2,14 @@ import type { ChildProcess } from 'node:child_process'
 import type { Writable } from 'node:stream'
 
 export type HarnessSpawnPrintArgs = {
-	model: string
+	model: string | null
 	prompt: string
 	cwd: string
 	logStream: Writable
 }
 
 export type HarnessSpawnInteractiveArgs = {
-	model: string
+	model: string | null
 	systemPrompt: string
 	cwd: string
 	initialPrompt?: string

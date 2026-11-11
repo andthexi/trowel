@@ -32,10 +32,10 @@ export const partialConfigPipe = v.object({
 				default: harnessFactories.claude.name,
 				examples: Object.keys(harnessFactories),
 			})),
-			model: v.optional(v.meta(v.string(), {
-				description: 'Model name passed to the selected Agent harness.',
-				default: harnessFactories.claude.defaultModel,
-				examples: [harnessFactories.claude.defaultModel],
+			model: v.optional(v.meta(v.nullable(v.string()), {
+				description: 'Model override passed to the selected Agent harness; null uses the harness-configured model.',
+				default: null,
+				examples: ['claude-opus-4-6', 'anthropic/claude-sonnet-4-5'],
 			})),
 		}), { description: 'Agent harness and model selection for Turns.' }),
 	),
@@ -155,7 +155,7 @@ export const defaultConfig: Config = {
 	},
 	agent: {
 		harness: harnessFactories.claude.name,
-		model: harnessFactories.claude.defaultModel,
+		model: null,
 	},
 	labels: {
 		readyForAgent: 'ready-for-agent',
@@ -264,8 +264,8 @@ if (import.meta.vitest) {
 			expect(defaultConfig.turn.copyToWorktree).toEqual([])
 		})
 
-		test('agent defaults to claude-opus-4-6', () => {
-			expect(defaultConfig.agent.model).toBe('claude-opus-4-6')
+		test('agent model defaults to null so the harness chooses its configured model', () => {
+			expect(defaultConfig.agent.model).toBeNull()
 		})
 
 		test('work loop defaults: Auditing off, 24h worktree cleanup, 30s loop polling', () => {
@@ -283,6 +283,11 @@ if (import.meta.vitest) {
 		test('accepts an empty object (every field optional)', () => {
 			const result = v.validate(partialConfigPipe, {})
 			expect(result.valid).toBe(true)
+		})
+
+		test('accepts agent.model as a string or null', () => {
+			expect(v.validate(partialConfigPipe, { agent: { model: 'custom-model' } }).valid).toBe(true)
+			expect(v.validate(partialConfigPipe, { agent: { model: null } }).valid).toBe(true)
 		})
 
 		test('accepts a partial with only one nested key set', () => {

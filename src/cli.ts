@@ -10,6 +10,7 @@ import { list } from './commands/list/index.ts'
 import { shipChange } from './commands/ship/index.ts'
 import { statusChange } from './commands/status/index.ts'
 import { changeWork } from './commands/work/index.ts'
+import { harnessFactories } from './harnesses/registry.ts'
 
 async function initialRequest(requestWords: string[]): Promise<string | undefined> {
 	return chooseInitialRequest(requestWords.join(' ').trim(), await pipedStdin())
@@ -31,6 +32,10 @@ async function pipedStdin(): Promise<string> {
 	return Buffer.concat(chunks).toString('utf8').trim()
 }
 
+function harnessKinds(): string {
+	return Object.keys(harnessFactories).join(' | ')
+}
+
 export function run(): void {
 	const program = new Command()
 
@@ -43,7 +48,7 @@ export function run(): void {
 		.description('Understand a user request by grilling, plan repository work, and create a Change when needed')
 		.argument('[request...]', 'Initial request words')
 		.option('--storage <kind>', 'Override project storage')
-		.option('--harness <kind>', 'Override project agent harness (claude | codex | pi)')
+		.option('--harness <kind>', `Override project agent harness (${harnessKinds()})`)
 		.action(async (requestWords: string[], opts: { storage?: string; harness?: string }) => {
 			await changeStart({ ...opts, request: await initialRequest(requestWords) })
 		})
@@ -70,7 +75,7 @@ export function run(): void {
 		.description('Run AFK work across Changes, or on one Change when a Change id is provided')
 		.argument('[change-id]')
 		.option('--storage <kind>', 'Override project storage')
-		.option('--harness <kind>', 'Override project agent harness (claude | codex | pi)')
+		.option('--harness <kind>', `Override project agent harness (${harnessKinds()})`)
 		.option('--loop', 'Keep polling for newly actionable work')
 		.action(async (changeId: string | undefined, opts) => {
 			await changeWork(changeId, opts)
@@ -100,7 +105,7 @@ export function run(): void {
 		.command('start')
 		.description('Start a foreground human-in-the-loop implementation Lane in a managed worktree')
 		.argument('<title...>', 'Lane title/request words')
-		.option('--harness <kind>', 'Override project agent harness (claude | codex | pi)')
+		.option('--harness <kind>', `Override project agent harness (${harnessKinds()})`)
 		.action(async (titleWords: string[], opts: { harness?: string }) => {
 			await laneStart(titleWords.join(' '), opts)
 		})
@@ -109,7 +114,7 @@ export function run(): void {
 		.command('continue')
 		.description('Open an interactive agent session in an existing Lane worktree')
 		.argument('<lane-id>')
-		.option('--harness <kind>', 'Override project agent harness (claude | codex | pi)')
+		.option('--harness <kind>', `Override project agent harness (${harnessKinds()})`)
 		.action(async (laneId: string, opts: { harness?: string }) => {
 			await laneContinue(laneId, opts)
 		})

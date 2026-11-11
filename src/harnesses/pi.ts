@@ -2,9 +2,14 @@ import { detectCliVersion, spawnHarness, spawnPrintCommand, waitForChildExit } f
 import type { HarnessAdapter, HarnessSpawnHandle, HarnessSpawnInteractiveArgs, HarnessSpawnPrintArgs, HarnessVersionInfo } from './types.ts'
 
 function piInteractiveArgs(args: HarnessSpawnInteractiveArgs): string[] {
-	const out = ['--append-system-prompt', args.systemPrompt, '--model', args.model]
+	const out = ['--append-system-prompt', args.systemPrompt]
+	if (args.model) out.push('--model', args.model)
 	if (args.initialPrompt) out.push(args.initialPrompt)
 	return out
+}
+
+function modelArgs(model: string | null): string[] {
+	return model ? ['--model', model] : []
 }
 
 export const piHarness: HarnessAdapter = {
@@ -14,7 +19,7 @@ export const piHarness: HarnessAdapter = {
 
 	async spawnPrint(args: HarnessSpawnPrintArgs): Promise<HarnessSpawnHandle> {
 		// `--mode json` emits NDJSON events per agent step instead of the final response text.
-		return spawnPrintCommand('pi', ['-p', '--mode', 'json', '--model', args.model, '--no-session', args.prompt], {
+		return spawnPrintCommand('pi', ['-p', '--mode', 'json', ...modelArgs(args.model), '--no-session', args.prompt], {
 			cwd: args.cwd,
 			logStream: args.logStream,
 		})
@@ -51,6 +56,12 @@ if (import.meta.vitest) {
 				'--model',
 				'm',
 				'do thing',
+			])
+		})
+		test('interactive args omit the model flag when model is null', () => {
+			expect(piInteractiveArgs({ model: null, systemPrompt: 's', cwd: '/tmp/x' })).toEqual([
+				'--append-system-prompt',
+				's',
 			])
 		})
 	})

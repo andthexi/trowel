@@ -2,9 +2,14 @@ import { detectCliVersion, spawnHarness, spawnPrintCommand, waitForChildExit } f
 import type { HarnessAdapter, HarnessSpawnHandle, HarnessSpawnInteractiveArgs, HarnessSpawnPrintArgs, HarnessVersionInfo } from './types.ts'
 
 function claudeInteractiveArgs(args: HarnessSpawnInteractiveArgs): string[] {
-	const out = ['--append-system-prompt', args.systemPrompt, '--model', args.model]
+	const out = ['--append-system-prompt', args.systemPrompt]
+	if (args.model) out.push('--model', args.model)
 	if (args.initialPrompt) out.push(args.initialPrompt)
 	return out
+}
+
+function modelArgs(model: string | null): string[] {
+	return model ? ['--model', model] : []
 }
 
 export const claudeHarness: HarnessAdapter = {
@@ -17,7 +22,7 @@ export const claudeHarness: HarnessAdapter = {
 		// include those events rather than just the final assistant text.
 		return spawnPrintCommand(
 			'claude',
-			['--print', '--model', args.model, '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'],
+			['--print', ...modelArgs(args.model), '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'],
 			{
 				cwd: args.cwd,
 				prompt: args.prompt,
@@ -56,6 +61,12 @@ if (import.meta.vitest) {
 				'--model',
 				'm',
 				'do thing',
+			])
+		})
+		test('interactive args omit the model flag when model is null', () => {
+			expect(claudeInteractiveArgs({ model: null, systemPrompt: 's', cwd: '/tmp/x' })).toEqual([
+				'--append-system-prompt',
+				's',
 			])
 		})
 	})

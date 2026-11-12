@@ -5,7 +5,7 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { countCreatedCommits } from './_loop-wiring.ts'
+import { countCreatedCommits, countTurnCommits } from './_loop-wiring.ts'
 
 const dirs: string[] = []
 
@@ -56,6 +56,16 @@ describe('countCreatedCommits', () => {
 		git(dir, 'commit', '--amend', '--no-edit', '-q')
 		const branchAfter = git(dir, 'rev-parse', 'HEAD')
 		expect(await countCreatedCommits(dir, before, before, before, branchAfter)).toBe(1)
+	})
+
+	test('counts an already-present local commit not yet on origin', async () => {
+		const dir = repo()
+		git(dir, 'branch', '-M', 'slice')
+		git(dir, 'remote', 'add', 'origin', dir)
+		git(dir, 'update-ref', 'refs/remotes/origin/slice', 'HEAD')
+		git(dir, 'commit', '--allow-empty', '-qm', 'local turn commit')
+		const head = git(dir, 'rev-parse', 'HEAD')
+		expect(await countTurnCommits(dir, 'slice', head, head, head, head)).toBe(1)
 	})
 
 	test('returns zero when HEAD is unchanged', async () => {

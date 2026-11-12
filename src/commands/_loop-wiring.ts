@@ -72,7 +72,7 @@ export async function buildLoopWiring(opts: { storage?: string; harness?: Harnes
 
 		const headAfter = await gitStdoutOr(worktree.worktreePath, ['rev-parse', 'HEAD'], baseHead)
 		const branchHeadAfter = await gitStdoutOr(worktree.worktreePath, ['rev-parse', branch], headAfter)
-		const commits = await countCreatedCommits(worktree.worktreePath, baseHead, headAfter, branchHeadBefore, branchHeadAfter)
+		const commits = await countTurnCommits(worktree.worktreePath, branch, baseHead, headAfter, branchHeadBefore, branchHeadAfter)
 		return { commits }
 	}
 
@@ -126,6 +126,19 @@ export async function buildLoopWiring(opts: { storage?: string; harness?: Harnes
 async function gitStdoutOr(cwd: string, args: string[], fallback: string): Promise<string> {
 	const result = await tryExec('git', ['-C', cwd, ...args])
 	return result.ok ? result.stdout.trim() : fallback
+}
+
+export async function countTurnCommits(
+	cwd: string,
+	branch: string,
+	baseHead: string,
+	headAfter: string,
+	branchHeadBefore: string,
+	branchHeadAfter: string,
+): Promise<number> {
+	const direct = await countCreatedCommits(cwd, baseHead, headAfter, branchHeadBefore, branchHeadAfter)
+	if (direct > 0) return direct
+	return gitCountOrZero(cwd, `origin/${branch}..${branchHeadAfter}`)
 }
 
 export async function countCreatedCommits(

@@ -48,6 +48,16 @@ describe('countCreatedCommits', () => {
 		expect(await countCreatedCommits(dir, before, after)).toBe(1)
 	})
 
+	test('counts an amended branch ref even when the worktree HEAD stays stale', async () => {
+		const dir = repo()
+		const before = git(dir, 'rev-parse', 'HEAD')
+		writeFileSync(path.join(dir, 'file.txt'), 'amended\n')
+		git(dir, 'add', 'file.txt')
+		git(dir, 'commit', '--amend', '--no-edit', '-q')
+		const branchAfter = git(dir, 'rev-parse', 'HEAD')
+		expect(await countCreatedCommits(dir, before, before, before, branchAfter)).toBe(1)
+	})
+
 	test('returns zero when HEAD is unchanged', async () => {
 		const dir = repo()
 		const head = git(dir, 'rev-parse', 'HEAD')

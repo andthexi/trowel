@@ -39,6 +39,7 @@ export async function buildLoopWiring(opts: { storage?: string; harness?: Harnes
 		worktree,
 		logPath,
 		role,
+		branch,
 	}: {
 		worktree: TurnWorktree
 		logPath: string
@@ -56,6 +57,7 @@ export async function buildLoopWiring(opts: { storage?: string; harness?: Harnes
 		logStream.write(`\n=== ${startedAt} · change-${worktree.changeId} · ${role} · harness=${harness.name} ===\n`)
 
 		const baseHead = await gitStdoutOr(worktree.worktreePath, ['rev-parse', 'HEAD'], '')
+		const branchHeadBefore = await gitStdoutOr(worktree.worktreePath, ['rev-parse', branch], baseHead)
 		const { waitForExit } = await harness.spawnPrint({
 			model: config.agent.model,
 			prompt: rendered,
@@ -69,7 +71,8 @@ export async function buildLoopWiring(opts: { storage?: string; harness?: Harnes
 		logHarnessExitIfFailed(exitCode, worktree, harness.name, logPath, log)
 
 		const headAfter = await gitStdoutOr(worktree.worktreePath, ['rev-parse', 'HEAD'], baseHead)
-		const commits = await countCreatedCommits(worktree.worktreePath, baseHead, headAfter)
+		const branchHeadAfter = await gitStdoutOr(worktree.worktreePath, ['rev-parse', branch], headAfter)
+		const commits = await countCreatedCommits(worktree.worktreePath, baseHead, headAfter, branchHeadBefore, branchHeadAfter)
 		return { commits }
 	}
 
@@ -125,9 +128,16 @@ async function gitStdoutOr(cwd: string, args: string[], fallback: string): Promi
 	return result.ok ? result.stdout.trim() : fallback
 }
 
-export async function countCreatedCommits(cwd: string, baseHead: string, headAfter: string): Promise<number> {
+export async function countCreatedCommits(
+	cwd: string,
+	baseHead: string,
+	headAfter: string,
+	branchHeadBefore = baseHead,
+	branchHeadAfter = headAfter,
+): Promise<number> {
 	const commits = await gitCountOrZero(cwd, `${baseHead}..${headAfter}`)
-	return commits > 0 ? commits : Number(headAfter !== baseHead)
+	if (commits > 0) return commits
+	return Number(headAfter !== baseHead || branchHeadAfter !== branchHeadBefore)
 }
 
 async function gitCountOrZero(cwd: string, revRange: string): Promise<number> {

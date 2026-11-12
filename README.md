@@ -18,6 +18,7 @@ Personal CLI for orchestrating Change-driven repository work — start, slice, a
 | Command | Purpose |
 | --- | --- |
 | `trowel change start [--storage <kind>] [--harness <kind>]` | Understand a user request by grilling, plan repository work, and create a Change when needed. |
+| `trowel change create [json] [--storage <kind>]` | Create a Change and Slices from caller-supplied JSON without a Grill or harness. |
 | `trowel change list [--storage <kind>]` | List all Changes newest first with computed state. |
 | `trowel change status <change-id> [--storage <kind>]` | Show one Change and its Slice states. |
 | `trowel change work [change-id] [--loop] [--storage <kind>] [--harness <kind>]` | Run project-wide AFK work across Changes, or scope to one Change when a Change id is provided; `--loop` keeps polling for newly actionable work. |
@@ -35,6 +36,26 @@ Personal CLI for orchestrating Change-driven repository work — start, slice, a
 
 Lanes are local interactive workspaces, not Changes or Slices. They are useful when you want multiple terminal tabs running separate foreground agent sessions in isolated worktrees without invoking the full Trowel delivery lifecycle. Lane agents grill the concept first, then batch material implementation-detail decisions for confirmation before chunk planning. Lane implementation proceeds in small reviewable chunks; after each chunk is reviewed and accepted, the agent commits that chunk locally and continues. `trowel lane close` refuses predicted merge conflicts, then squash-closes those per-chunk commits into one Target-branch commit using your normal git commit editor with an editable template.
 
+## Create from an approved specification
+
+Use `change start` for an interactive Grill. Use `change create` when the caller has already prepared the specification:
+
+```sh
+trowel change create '{"outcome":"create-change","change":{"title":"Fix auth","body":"Describe the agreed change."},"slices":[{"title":"Fix and test","body":"Implementation and acceptance criteria.","blockedBy":[],"readyForAgent":true}]}' --storage file
+# Or pass the same JSON through stdin:
+trowel change create --storage file < change.json
+```
+
+Supply raw JSON as **one quoted positional argument or stdin**, not a filename argument and not both channels. Missing/empty input is an error. Only `outcome: "create-change"` is accepted; `existing-change` and `no-change` belong to the Grill. The schema is the same creation payload used by `change start`: Change and Slice `title`/`body` strings, Slice `readyForAgent` booleans, and `blockedBy` arrays of zero-based Slice indices. Forward references are allowed; out-of-range/non-integer indices, self-references, and cycles are rejected. Empty `slices` is supported. Validation finishes before any git or storage mutation.
+
+`change create` never prompts, launches a harness, runs Work/Ship, or commits. It does not read, delete, or overwrite `.trowel/start-change-out.json`. There is no `--harness` flag. Every invocation attempts a new Change; content is not deduplicated and failures are not automatically retried.
+
+Creation uses the same post-Grill materialisation and recovery as `change start`: capture the invocation branch as Target, stash dirty files including untracked files, create the storage record and remote Change branch, write branch metadata, fetch/check out the Change branch, restore the stash, then create Slices and resolve blockers/readiness. Both storage kinds need a usable `origin` containing the Target branch; the Change branch starts from its remote tip. Issue storage also needs GitHub access. `--storage file|issue` overrides project configuration for this invocation; keep that selection when running subsequent commands.
+
+On success, the checkout remains on the Change branch with dirty work and file-storage artifacts uncommitted. On failure before branch metadata is saved, recovery restores the invocation branch and stash when possible. After metadata is saved, failures preserve the current branch/stash state for inspection rather than rolling back; this includes fetch/checkout failures and stash conflicts. Errors after a confirmed record creation report its id, intended branch, and confirmed Slice ids. Inspect storage, `git status`, and `git stash list` before doing anything else—rerunning creation is not a resume operation.
+
+The shared existing stash flow has limitations: untracked file-storage records temporarily disappear during allocation and can collide with newly allocated ids, and an unignored `.trowel/lock` can collide on stash restore. Persist prior file-storage records before another creation and ignore the runtime lock; resolve any stash conflict manually. Creation does not add a new transaction or rollback system.
+
 ## States and workflow flags
 
 Change states are computed from storage fields, Slice states, branch merge facts, and Close-out PR review surfaces: `open`, `ready`, `awaiting-review`, `needs-revision`, `landed`, `done`, and `aborted`.
@@ -48,4 +69,4 @@ Key workflow flags:
 - `work.perSliceBranches` (default `true`) controls how `prepareImplement` fills a null Slice branch: when true it creates a per-Slice branch from the latest remote Change branch; when false it stores the parent Change branch and serializes work on that shared branch.
 - `work.loopPollSeconds` (default `30`) controls the idle polling interval for `trowel change work <id> --loop` and project-wide `trowel change work --loop`.
 
-Branch behavior: `trowel change start` intentionally switches the main checkout to the newly created Change branch after materialising the Change. Later host-owned local merges do not use the main checkout: `trowel change work` and merge-based `trowel change ship` merge through reserved trowel change worktrees. Before host-owned local merges, Trowel runs merge conflict preflight; interactive commands ask before proceeding with predicted conflicts, while non-interactive work fails before mutating worktrees or branches. `trowel change ship` and `trowel change abort` also refuse Cleanup when the current branch is one of the local branches Cleanup may delete; switch branches first, then retry.
+Branch behavior: `trowel change start` (when creating) and `trowel change create` intentionally switch the main checkout to the newly created Change branch after materialising the Change. Later host-owned local merges do not use the main checkout: `trowel change work` and merge-based `trowel change ship` merge through reserved trowel change worktrees. Before host-owned local merges, Trowel runs merge conflict preflight; interactive commands ask before proceeding with predicted conflicts, while non-interactive work fails before mutating worktrees or branches. `trowel change ship` and `trowel change abort` also refuse Cleanup when the current branch is one of the local branches Cleanup may delete; switch branches first, then retry.

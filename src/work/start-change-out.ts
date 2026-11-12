@@ -46,6 +46,10 @@ export type ExistingChangeStartOut = PipeOutput<typeof existingChangePipe>
 export type NoChangeStartOut = PipeOutput<typeof noChangePipe>
 export type StartChangeOut = CreateChangeStartOut | ExistingChangeStartOut | NoChangeStartOut
 
+export function parseCreateChangeInput(raw: string): CreateChangeStartOut {
+	return validateJson<CreateChangeStartOut>(createChangePipe, raw, 'Invalid change create JSON')
+}
+
 export function parseStartChangeOut(raw: string): StartChangeOut {
 	return validateJson<StartChangeOut>(startChangeOutPipe, raw, 'Invalid start-change-out.json')
 }

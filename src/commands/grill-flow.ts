@@ -1,6 +1,7 @@
 import { readFile, unlink } from 'node:fs/promises'
 import path from 'node:path'
 
+import { changeCreationState, recoverBeforeMaterialisation, stashIfDirty } from './change-creation'
 import type { GitOps } from '../utils/git-ops.ts'
 
 export type GrillRuntime<Spec> = {
@@ -80,10 +81,10 @@ async function collectGrillSpec<Spec>(rt: GrillRuntime<Spec>, resumedSpec: Spec 
 	let stashed = false
 	try {
 		const spec = resumedSpec ?? await runInteractiveAndParseOut(rt)
-		stashed = await stashIfDirty(rt)
+		stashed = await stashIfDirty(rt.git)
 		return { spec, stashed }
 	} catch (e) {
-		await recoverCollectedSpec(rt, targetBranch, stashed)
+		await recoverBeforeMaterialisation(rt.git, targetBranch, stashed)
 		throw e
 	}
 }
@@ -98,33 +99,13 @@ async function runInteractiveAndParseOut<Spec>(rt: GrillRuntime<Spec>): Promise<
 	return rt.parseOut(raw)
 }
 
-async function stashIfDirty<Spec>(rt: GrillRuntime<Spec>): Promise<boolean> {
-	if (await rt.git.isWorkingTreeClean()) return false
-	await rt.git.stashPush({ includeUntracked: true })
-	return true
-}
-
-async function recoverCollectedSpec<Spec>(rt: GrillRuntime<Spec>, targetBranch: string, stashed: boolean): Promise<void> {
-	if ((await rt.git.currentBranch()) !== targetBranch) await rt.git.checkout(targetBranch)
-	if (stashed) await rt.git.stashPop()
-}
-
 function grillSpecResult<Spec>(rt: GrillRuntime<Spec>, outPath: string, targetBranch: string, collected: CollectedGrillSpec<Spec>): GrillSpecResult<Spec> {
-	let materialised = false
 	return {
+		...changeCreationState(rt.git, targetBranch, collected.stashed),
 		spec: collected.spec,
-		targetBranch,
 		backTo: targetBranch,
-		stashed: collected.stashed,
-		markMaterialised: () => { materialised = true },
 		clearOut: () => unlinkSwallowEnoent(outPath),
-		recover: () => recoverGrillSpecResult(rt, targetBranch, collected.stashed, materialised),
 	}
-}
-
-async function recoverGrillSpecResult<Spec>(rt: GrillRuntime<Spec>, targetBranch: string, stashed: boolean, materialised: boolean): Promise<void> {
-	if (materialised) return
-	await recoverCollectedSpec(rt, targetBranch, stashed)
 }
 
 async function unlinkSwallowEnoent(p: string): Promise<void> {

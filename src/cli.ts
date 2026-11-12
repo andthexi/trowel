@@ -1,6 +1,7 @@
 import { Command } from 'commander'
 
 import { abortChange } from './commands/abort/index.ts'
+import { changeCreate } from './commands/change-create'
 import { changeStart } from './commands/change-start.ts'
 import { showConfig } from './commands/config.ts'
 import { doctor } from './commands/doctor.ts'
@@ -32,6 +33,13 @@ async function pipedStdin(): Promise<string> {
 	return Buffer.concat(chunks).toString('utf8').trim()
 }
 
+function createInput(positional: string | undefined, stdin: string): string {
+	if (positional !== undefined && stdin) throw new Error('provide change create JSON either as an argument or via stdin, not both')
+	const raw = positional ?? stdin
+	if (!raw.trim()) throw new Error('change create requires non-empty JSON as one argument or via stdin')
+	return raw
+}
+
 function harnessKinds(): string {
 	return Object.keys(harnessFactories).join(' | ')
 }
@@ -51,6 +59,15 @@ export function run(): void {
 		.option('--harness <kind>', `Override project agent harness (${harnessKinds()})`)
 		.action(async (requestWords: string[], opts: { storage?: string; harness?: string }) => {
 			await changeStart({ ...opts, request: await initialRequest(requestWords) })
+		})
+
+	changeCmd
+		.command('create')
+		.description('Create a Change from caller-supplied JSON without a Grill')
+		.argument('[json]', 'Raw create-change JSON (or supply it via stdin)')
+		.option('--storage <kind>', 'Override project storage')
+		.action(async (json: string | undefined, opts: { storage?: string }) => {
+			await changeCreate(createInput(json, await pipedStdin()), opts)
 		})
 
 	changeCmd

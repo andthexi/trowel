@@ -1,11 +1,10 @@
 import path from 'node:path'
 
+import { materialiseChange, type CreatedChange } from './change-creation'
 import { resolveGrillSpec, type GrillSpecResult } from './grill-flow.ts'
 import { buildGrillCommandRuntime, exitOnCommandError } from './runtime.ts'
-import type { ChangeMetadataPatch, Storage } from '../storages/types.ts'
+import type { Storage } from '../storages/types.ts'
 import type { GitOps } from '../utils/git-ops.ts'
-import { withMutationLock } from '../utils/mutation-lock.ts'
-import { slug as slugify } from '../utils/slug.ts'
 import { parseStartChangeOut, type CreateChangeStartOut, type StartChangeOut } from '../work/start-change-out.ts'
 
 export type ChangeStartRuntime = {
@@ -23,7 +22,7 @@ export type ChangeStartRuntime = {
 
 type ChangeStartSpec = CreateChangeStartOut
 type ChangeStartGrillResult = GrillSpecResult<StartChangeOut>
-type CreatedChangeStart = { changeId: string; changeBranch: string; realIds: string[]; spec: ChangeStartSpec }
+type CreatedChangeStart = CreatedChange
 
 export async function runChangeStart(rt: ChangeStartRuntime): Promise<void> {
 	const result = await resolveChangeStartSpec(rt)
@@ -57,7 +56,7 @@ function resolveChangeStartSpec(rt: ChangeStartRuntime): Promise<ChangeStartGril
 
 async function handleChangeStartOutcome(rt: ChangeStartRuntime, result: ChangeStartGrillResult): Promise<void> {
 	if (result.spec.outcome === 'create-change') {
-		const created = await materialiseChangeStart(rt, result, result.spec)
+		const created = await materialiseChange(rt, result, result.spec)
 		printCreatedChangeStart(rt, created)
 		return
 	}
@@ -66,52 +65,6 @@ async function handleChangeStartOutcome(rt: ChangeStartRuntime, result: ChangeSt
 		return
 	}
 	printNoChangeStart(rt, result.spec.reason)
-}
-
-async function materialiseChangeStart(rt: ChangeStartRuntime, result: ChangeStartGrillResult, spec: ChangeStartSpec): Promise<CreatedChangeStart> {
-	return withMutationLock(rt.projectRoot, async () => {
-		const created = await rt.storage.createChange(spec.change)
-		const changeId = created.id
-		const changeBranch = changeBranchName(changeId, created.title)
-		await rt.git.createRemoteBranch(changeBranch, result.targetBranch)
-		await updateChangeMetadataOrThrow(rt, changeId, { targetBranch: result.targetBranch, changeBranch })
-		result.markMaterialised()
-		await rt.git.fetch(changeBranch)
-		await rt.git.checkout(changeBranch)
-		if (result.stashed) await rt.git.stashPop()
-		const realIds = await createChangeStartSlices(rt, changeId, spec)
-		await updateChangeStartSliceLinks(rt, changeId, spec, realIds)
-		return { changeId, changeBranch, realIds, spec }
-	})
-}
-
-function changeBranchName(changeId: string, title: string): string {
-	return `change-${changeId}-${slugify(title)}`
-}
-
-async function updateChangeMetadataOrThrow(rt: ChangeStartRuntime, changeId: string, patch: ChangeMetadataPatch): Promise<void> {
-	try {
-		await rt.storage.updateChangeMetadata(changeId, patch)
-	} catch (e) {
-		throw new Error(`failed to update Change metadata for ${changeId}: ${(e as Error).message}`)
-	}
-}
-
-async function createChangeStartSlices(rt: ChangeStartRuntime, changeId: string, spec: ChangeStartSpec): Promise<string[]> {
-	const realIds: string[] = []
-	for (const slice of spec.slices) {
-		const created = await rt.storage.createSlice(changeId, { title: slice.title, body: slice.body })
-		realIds.push(created.id)
-	}
-	return realIds
-}
-
-async function updateChangeStartSliceLinks(rt: ChangeStartRuntime, changeId: string, spec: ChangeStartSpec, realIds: string[]): Promise<void> {
-	for (const [i, slice] of spec.slices.entries()) {
-		const sliceId = realIds[i]!
-		await rt.storage.setSliceBlockers(changeId, sliceId, slice.blockedBy.map((idx) => realIds[idx]!))
-		await rt.storage.setSliceReadyForAgent(changeId, sliceId, slice.readyForAgent)
-	}
 }
 
 function printCreatedChangeStart(rt: ChangeStartRuntime, created: CreatedChangeStart): void {

@@ -69,7 +69,7 @@ export async function buildLoopWiring(opts: { storage?: string; harness?: Harnes
 		logHarnessExitIfFailed(exitCode, worktree, harness.name, logPath, log)
 
 		const headAfter = await gitStdoutOr(worktree.worktreePath, ['rev-parse', 'HEAD'], baseHead)
-		const commits = await gitCountOrZero(worktree.worktreePath, `${baseHead}..${headAfter}`)
+		const commits = await countCreatedCommits(worktree.worktreePath, baseHead, headAfter)
 		return { commits }
 	}
 
@@ -123,6 +123,11 @@ export async function buildLoopWiring(opts: { storage?: string; harness?: Harnes
 async function gitStdoutOr(cwd: string, args: string[], fallback: string): Promise<string> {
 	const result = await tryExec('git', ['-C', cwd, ...args])
 	return result.ok ? result.stdout.trim() : fallback
+}
+
+export async function countCreatedCommits(cwd: string, baseHead: string, headAfter: string): Promise<number> {
+	const commits = await gitCountOrZero(cwd, `${baseHead}..${headAfter}`)
+	return commits > 0 ? commits : Number(headAfter !== baseHead)
 }
 
 async function gitCountOrZero(cwd: string, revRange: string): Promise<number> {

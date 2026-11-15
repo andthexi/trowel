@@ -189,6 +189,18 @@ export function createGh(runner: GhRunner = (args) => tryExec('gh', args)): GhOp
 		return parsePaginatedArray<T>(await ghOrThrow(args))
 	}
 
+	async function removeIssueLabel(id: number, label: string): Promise<void> {
+		const endpoint = `repos/{owner}/{repo}/issues/${id}/labels`
+		const result = await runner(['api', '-X', 'DELETE', `${endpoint}/${encodeURIComponent(label)}`])
+		if (result.ok) return
+		const stderr = 'stderr' in result.error ? String(result.error.stderr) : ''
+		if (!/\bHTTP 404\b/.test(`${result.error.message}\n${stderr}`)) throw result.error
+		// A DELETE 404 is harmless only if the exact issue is accessible and the
+		// requested label is absent. Read all pages, including concurrent changes.
+		const labels = await ghPaginatedArray<{ name: string }>(['api', '--paginate', '--slurp', endpoint])
+		if (!Array.isArray(labels) || labels.some((entry) => typeof entry?.name !== 'string' || entry.name.toLowerCase() === label.toLowerCase())) throw result.error
+	}
+
 	return {
 		async detectVersion() {
 			const r = await runner(['--version'])
@@ -268,8 +280,7 @@ export function createGh(runner: GhRunner = (args) => tryExec('gh', args)): GhOp
 		},
 		async editIssueLabels(id, { add = [], remove = [] }) {
 			if (add.length > 0) await ghOrThrow(['api', '-X', 'POST', `repos/{owner}/{repo}/issues/${id}/labels`, ...labelFields(add)])
-			for (const label of remove)
-				await ghOrThrow(['api', '-X', 'DELETE', `repos/{owner}/{repo}/issues/${id}/labels/${encodeURIComponent(label)}`])
+			for (const label of remove) await removeIssueLabel(id, label)
 		},
 
 		async listSubIssues(changeId) {
@@ -439,6 +450,49 @@ if (import.meta.vitest) {
 	})
 
 	describe('createGh: issue methods', () => {
+		test('removing an absent label succeeds only after reading the accessible issue labels', async () => {
+			const { runner, calls } = makeRunner([
+				{ match: (a) => a.includes('DELETE'), respond: { ok: false, error: new Error('gh: Label does not exist (HTTP 404)') } },
+				{ match: (a) => a.join(' ') === 'api --paginate --slurp repos/{owner}/{repo}/issues/7/labels', respond: ok('[[{"name":"unrelated"}]]') },
+			])
+			await createGh(runner).editIssueLabels(7, { remove: ['ready-for-agent'] })
+			await createGh(runner).editIssueLabels(7, { remove: ['ready-for-agent'] })
+			expect(calls).toHaveLength(4)
+			expect(calls[1]).toEqual(['api', '--paginate', '--slurp', 'repos/{owner}/{repo}/issues/7/labels'])
+		})
+
+		test.each(['ready-for-agent', 'needs-revision', 'custom / label'])('does not suppress 404 when %s remains present', async (label) => {
+			const error = new Error('gh: Not Found (HTTP 404)')
+			const { runner } = makeRunner([
+				{ match: (a) => a.includes('DELETE'), respond: { ok: false, error } },
+				{ match: () => true, respond: ok(JSON.stringify([{ name: label }])) },
+			])
+			await expect(createGh(runner).editIssueLabels(7, { remove: [label] })).rejects.toBe(error)
+		})
+
+		test.each(['HTTP 403', 'HTTP 429', 'network unavailable', 'HTTP 500'])('preserves genuine deletion failure: %s', async (message) => {
+			const error = new Error(message)
+			const { runner, calls } = makeRunner([{ match: () => true, respond: { ok: false, error } }])
+			await expect(createGh(runner).editIssueLabels(7, { remove: ['ready-for-agent'] })).rejects.toBe(error)
+			expect(calls).toHaveLength(1)
+		})
+
+		test('does not suppress 404 when exact-target verification fails', async () => {
+			const { runner } = makeRunner([{ match: () => true, respond: { ok: false, error: new Error('gh: Not Found (HTTP 404)') } }])
+			await expect(createGh(runner).editIssueLabels(7, { remove: ['ready-for-agent'] })).rejects.toThrow('HTTP 404')
+		})
+
+		test('handles another actor removing a custom label without replacing unrelated labels', async () => {
+			const label = 'custom / label'
+			const { runner, calls } = makeRunner([
+				{ match: (a) => a.includes('DELETE'), respond: { ok: false, error: Object.assign(new Error('command failed'), { stderr: 'gh: Label does not exist (HTTP 404)' }) } },
+				{ match: () => true, respond: ok('[{"name":"unrelated"}]') },
+			])
+			await createGh(runner).editIssueLabels(7, { remove: [label] })
+			expect(calls[0]).toEqual(['api', '-X', 'DELETE', 'repos/{owner}/{repo}/issues/7/labels/custom%20%2F%20label'])
+			expect(calls).toHaveLength(2)
+		})
+
 		test('createIssue POSTs through gh api and returns structured issue ids', async () => {
 			const { runner, calls } = makeRunner([
 				{

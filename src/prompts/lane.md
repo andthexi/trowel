@@ -63,6 +63,8 @@ Rules for the table:
 
 When implementation details are locked, distill the accepted decisions into the Lane chunk plan. Do not copy the table verbatim unless it is the clearest artifact. The chat table may cite specific files or code evidence, but the plan should record stable decisions rather than fragile path-by-path instructions.
 
+Before proposing the chunk plan, audit the **entire resolved decision tree**—concept decisions and implementation details—for omissions, contradictions, weak assumptions, edge cases, and possible improvements. Check the decisions together, not only the latest branch, and use concrete scenarios where they expose gaps. If the audit finds a material issue, return to the affected decision, ask any needed question, and re-lock affected decisions. Then repeat the full audit. Do not reopen settled decisions without a concrete finding. Proceed to the chunk plan only when the audit passes. If there are no findings, state that the audit passed and move on without asking the user to approve the audit separately.
+
 ## Phase 4 — chunk plan confirmation
 
 When the concept and implementation details are both locked, summarize the implementation plan as small, reviewable chunks before asking for implementation approval. Each chunk should be one coherent behavior, refactor, or doc/test update that the user can review independently. Avoid bundling unrelated changes into one large diff.

@@ -202,13 +202,21 @@ The things explicitly out of scope for this Change.
 Anything else worth recording.
 ```
 
-Show the drafted Change body to the user in chat. Ask: "Does this look right? Push back on anything; otherwise say 'Change locked' and we'll move to slicing."
+Show the drafted Change body to the user in chat. Ask: "Does this look right? Push back on anything; otherwise say 'Change locked' and we'll audit the resolved decision tree before slicing."
 
 Iterate until the user locks it. **Do not write the JSON file yet.**
 
 ---
 
-## Step 8 — Phase 3b: draft the slices
+## Step 8 — final decision-tree audit, then slice planning
+
+Before proposing slices, audit the **entire resolved decision tree**—concept decisions and implementation details—for omissions, contradictions, weak assumptions, edge cases, and possible improvements. Check the decisions together, not only the latest branch, and use concrete scenarios where they expose gaps.
+
+If the audit finds a material issue, return to the affected decision, ask any needed question, and update/re-lock the Change body if affected. Then repeat the full audit. Do not reopen settled decisions without a concrete finding. Proceed to slicing only when the audit passes. If there are no findings, state that the audit passed and move on without asking the user to approve the audit separately.
+
+---
+
+## Step 9 — draft the slices
 
 When the Change body is locked, break it into **vertical slices**.
 
@@ -244,7 +252,7 @@ Iterate until the user locks the breakdown.
 
 ---
 
-## Step 9 — Slice body template
+## Step 10 — Slice body template
 
 For each slice, the body is markdown with these two sections:
 
@@ -264,7 +272,7 @@ Do NOT include a `Blocked by` section in the slice body — the data lives only 
 
 ---
 
-## Step 10 — Write `.trowel/start-change-out.json` and signal exit
+## Step 11 — Write `.trowel/start-change-out.json` and signal exit
 
 Once the Change body and slice list are both locked, serialize the result as JSON matching this exact schema:
 
